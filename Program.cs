@@ -26,6 +26,17 @@ builder.WebHost.ConfigureKestrel(options =>
         listenOptions.UseHttps();
     });
 });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll",
+        policy =>
+        {
+            policy.AllowAnyOrigin()  // Allow requests from any origin
+                  .AllowAnyMethod()   // Allow all HTTP methods
+                  .AllowAnyHeader()   // Allow all headers
+                  .WithExposedHeaders("*"); // Expose all headers to client
+        });
+});
 
 var app = builder.Build();
 app.MapGet("/", () => Results.Redirect("/swagger"));
