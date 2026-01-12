@@ -10,9 +10,22 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add DbContext - Using InMemory for simplicity
+// Get connection string from configuration
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    // Fallback connection string if not found in appsettings
+    connectionString = "Server=(localdb)\\MSSQLLocalDB;Database=ProductDB;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True";
+}
+
+// Add SQL Server DbContext with proper configuration
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseInMemoryDatabase("ProductDB"));
+    options.UseSqlServer(
+        connectionString,
+        sqlServerOptions => sqlServerOptions.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)
+    ));
+
 
 // If using SQL Server instead, use:
 // builder.Services.AddDbContext<ApplicationDbContext>(options =>
@@ -117,38 +130,74 @@ app.MapDelete("/api/products/{id}", async (int id, ApplicationDbContext db) =>
 
 
 
-// Seed initial data
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    
-    // Ensure database is created
-    dbContext.Database.EnsureCreated();
-    
-    // Seed data if empty
-    if (!dbContext.Products.Any())
+    var services = scope.ServiceProvider;
+    try
     {
-        dbContext.Products.AddRange(
-            new Product
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        
+        // Check if database exists and apply migrations
+        if (context.Database.CanConnect())
+        {
+            Console.WriteLine("Database connection successful.");
+            
+            // Apply any pending migrations
+            if (context.Database.GetPendingMigrations().Any())
             {
-                Id = 1,
-                Name = "Laptop",
-                Description = "High-performance laptop",
-                Price = 999.99m,
-                Quantity = 10,
-                CreatedAt = DateTime.UtcNow
-            },
-            new Product
-            {
-                Id = 2,
-                Name = "Mouse",
-                Description = "Wireless mouse",
-                Price = 29.99m,
-                Quantity = 50,
-                CreatedAt = DateTime.UtcNow
+                Console.WriteLine("Applying pending migrations...");
+                context.Database.Migrate();
+                Console.WriteLine("Migrations applied successfully.");
             }
-        );
-        dbContext.SaveChanges();
+        }
+        else
+        {
+            Console.WriteLine("Creating database and applying migrations...");
+            context.Database.Migrate();
+            Console.WriteLine("Database created successfully.");
+        }
+        
+        // Seed data if table is empty
+        if (!context.Products.Any())
+        {
+            Console.WriteLine("Seeding initial data...");
+            context.Products.AddRange(
+                new Product
+                {
+                    Name = "Laptop",
+                    Description = "High-performance laptop with 16GB RAM",
+                    Price = 1299.99m,
+                    Quantity = 15,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Product
+                {
+                    Name = "Wireless Mouse",
+                    Description = "Ergonomic wireless mouse with RGB lighting",
+                    Price = 49.99m,
+                    Quantity = 50,
+                    CreatedAt = DateTime.UtcNow
+                },
+                new Product
+                {
+                    Name = "Mechanical Keyboard",
+                    Description = "RGB mechanical keyboard with blue switches",
+                    Price = 89.99m,
+                    Quantity = 30,
+                    CreatedAt = DateTime.UtcNow
+                }
+            );
+            context.SaveChanges();
+            Console.WriteLine("Database seeded with initial data.");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"An error occurred: {ex.Message}");
+        if (ex.InnerException != null)
+        {
+            Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+        }
     }
 }
 

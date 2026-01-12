@@ -15,28 +15,25 @@ namespace ProductAPI.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-            
-            // Seed initial data
-            modelBuilder.Entity<Product>().HasData(
-                new Product
-                {
-                    Id = 1,
-                    Name = "Laptop",
-                    Description = "High-performance laptop",
-                    Price = 999.99m,
-                    Quantity = 10,
-                    CreatedAt = DateTime.UtcNow
-                },
-                new Product
-                {
-                    Id = 2,
-                    Name = "Mouse",
-                    Description = "Wireless mouse",
-                    Price = 29.99m,
-                    Quantity = 50,
-                    CreatedAt = DateTime.UtcNow
-                }
-            );
+
+            // Configure Product entity
+            modelBuilder.Entity<Product>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+                entity.Property(e => e.Description)
+                    .HasMaxLength(500);
+                entity.Property(e => e.Price)
+                    .HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Quantity)
+                    .HasDefaultValue(0);
+                entity.Property(e => e.CreatedAt)
+                    .HasDefaultValueSql("GETUTCDATE()");
+                entity.Property(e => e.UpdatedAt)
+                    .IsRequired(false);
+            });
         }
     }
 }
