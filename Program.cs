@@ -72,60 +72,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 
-// Define minimal API endpoints
-app.MapGet("/api/products", async (ApplicationDbContext db) =>
-{
-    var products = await db.Products.ToListAsync();
-    return Results.Ok(products);
-});
-
-app.MapGet("/api/products/{id}", async (int id, ApplicationDbContext db) =>
-{
-    var product = await db.Products.FindAsync(id);
-    return product == null ? Results.NotFound() : Results.Ok(product);
-});
-
-app.MapPost("/api/products", async (CreateProductDto dto, ApplicationDbContext db) =>
-{
-    var product = new Product
-    {
-        Name = dto.Name,
-        Description = dto.Description,
-        Price = dto.Price,
-        Quantity = dto.Quantity,
-        CreatedAt = DateTime.UtcNow
-    };
-    
-    db.Products.Add(product);
-    await db.SaveChangesAsync();
-    
-    return Results.Created($"/api/products/{product.Id}", product);
-});
-
-app.MapPut("/api/products/{id}", async (int id, UpdateProductDto dto, ApplicationDbContext db) =>
-{
-    var product = await db.Products.FindAsync(id);
-    if (product == null) return Results.NotFound();
-    
-    product.Name = dto.Name;
-    product.Description = dto.Description;
-    product.Price = dto.Price;
-    product.Quantity = dto.Quantity;
-    product.UpdatedAt = DateTime.UtcNow;
-    
-    await db.SaveChangesAsync();
-    return Results.NoContent();
-});
-
-app.MapDelete("/api/products/{id}", async (int id, ApplicationDbContext db) =>
-{
-    var product = await db.Products.FindAsync(id);
-    if (product == null) return Results.NotFound();
-    
-    db.Products.Remove(product);
-    await db.SaveChangesAsync();
-    return Results.NoContent();
-});
 
 
 
