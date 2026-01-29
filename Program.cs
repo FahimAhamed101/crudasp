@@ -68,6 +68,8 @@ if (app.Environment.IsDevelopment())
 // COMMENT OUT HTTPS redirection if not needed for development
 // app.UseHttpsRedirection();
 
+app.UseStaticFiles();
+
 app.UseAuthorization();
 app.MapControllers();
 

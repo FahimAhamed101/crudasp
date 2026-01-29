@@ -29,6 +29,9 @@ namespace ProductAPI.Data
                     .HasColumnType("decimal(18,2)");
                 entity.Property(e => e.Quantity)
                     .HasDefaultValue(0);
+                entity.Property(e => e.ImageUrl)
+                    .HasMaxLength(500)
+                    .IsRequired(false);
                 entity.Property(e => e.CreatedAt)
                     .HasDefaultValueSql("GETUTCDATE()");
                 entity.Property(e => e.UpdatedAt)

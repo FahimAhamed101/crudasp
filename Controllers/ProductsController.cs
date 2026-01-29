@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using ProductAPI.DTOs;
 using ProductAPI.Models;
 using ProductAPI.Repositories;
+using System.IO;
 
 namespace ProductAPI.Controllers
 {
@@ -10,10 +13,13 @@ namespace ProductAPI.Controllers
     public class ProductsController : ControllerBase
     {
         private readonly IProductRepository _repository;
+        private readonly IWebHostEnvironment _env;
+        private static readonly string[] AllowedImageExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
 
-        public ProductsController(IProductRepository repository)
+        public ProductsController(IProductRepository repository, IWebHostEnvironment env)
         {
             _repository = repository;
+            _env = env;
         }
 
         // GET: api/Products
@@ -28,6 +34,7 @@ namespace ProductAPI.Controllers
                 Description = p.Description,
                 Price = p.Price,
                 Quantity = p.Quantity,
+                ImageUrl = p.ImageUrl,
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt
             });
@@ -52,6 +59,7 @@ namespace ProductAPI.Controllers
                 Description = product.Description,
                 Price = product.Price,
                 Quantity = product.Quantity,
+                ImageUrl = product.ImageUrl,
                 CreatedAt = product.CreatedAt,
                 UpdatedAt = product.UpdatedAt
             };
@@ -61,14 +69,27 @@ namespace ProductAPI.Controllers
 
         // POST: api/Products
         [HttpPost]
-        public async Task<ActionResult<ProductDto>> CreateProduct(CreateProductDto createProductDto)
+        public async Task<ActionResult<ProductDto>> CreateProduct([FromForm] CreateProductDto createProductDto)
         {
+            string? imageUrl = null;
+            if (createProductDto.Image != null)
+            {
+                try
+                {
+                    imageUrl = await SaveImageAsync(createProductDto.Image);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return BadRequest(new { message = ex.Message });
+                }
+            }
             var product = new Product
             {
                 Name = createProductDto.Name,
                 Description = createProductDto.Description,
                 Price = createProductDto.Price,
                 Quantity = createProductDto.Quantity,
+                ImageUrl = imageUrl,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -81,6 +102,7 @@ namespace ProductAPI.Controllers
                 Description = createdProduct.Description,
                 Price = createdProduct.Price,
                 Quantity = createdProduct.Quantity,
+                ImageUrl = createdProduct.ImageUrl,
                 CreatedAt = createdProduct.CreatedAt
             };
 
@@ -89,14 +111,35 @@ namespace ProductAPI.Controllers
 
         // PUT: api/Products/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateProduct(int id, UpdateProductDto updateProductDto)
+        public async Task<IActionResult> UpdateProduct(int id, [FromForm] UpdateProductDto updateProductDto)
         {
+            var existingProduct = await _repository.GetByIdAsync(id);
+            if (existingProduct == null)
+            {
+                return NotFound(new { message = $"Product with ID {id} not found" });
+            }
+
+            string? imageUrl = null;
+            if (updateProductDto.Image != null)
+            {
+                try
+                {
+                    imageUrl = await SaveImageAsync(updateProductDto.Image);
+                    DeleteImageIfLocal(existingProduct.ImageUrl);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return BadRequest(new { message = ex.Message });
+                }
+            }
+
             var product = new Product
             {
                 Name = updateProductDto.Name,
                 Description = updateProductDto.Description,
                 Price = updateProductDto.Price,
-                Quantity = updateProductDto.Quantity
+                Quantity = updateProductDto.Quantity,
+                ImageUrl = imageUrl ?? existingProduct.ImageUrl
             };
 
             var updatedProduct = await _repository.UpdateAsync(id, product);
@@ -113,6 +156,12 @@ namespace ProductAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(int id)
         {
+            var existingProduct = await _repository.GetByIdAsync(id);
+            if (existingProduct == null)
+            {
+                return NotFound(new { message = $"Product with ID {id} not found" });
+            }
+
             var deleted = await _repository.DeleteAsync(id);
             
             if (!deleted)
@@ -120,7 +169,52 @@ namespace ProductAPI.Controllers
                 return NotFound(new { message = $"Product with ID {id} not found" });
             }
 
+            DeleteImageIfLocal(existingProduct.ImageUrl);
             return NoContent();
+        }
+
+        private async Task<string?> SaveImageAsync(IFormFile? image)
+        {
+            if (image == null || image.Length == 0)
+                return null;
+
+            var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
+            if (!AllowedImageExtensions.Contains(extension))
+                throw new InvalidOperationException("Unsupported image type.");
+
+            var webRoot = string.IsNullOrWhiteSpace(_env.WebRootPath)
+                ? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")
+                : _env.WebRootPath;
+
+            var imagesDir = Path.Combine(webRoot, "uploads", "products");
+            Directory.CreateDirectory(imagesDir);
+
+            var fileName = $"{Guid.NewGuid():N}{extension}";
+            var filePath = Path.Combine(imagesDir, fileName);
+
+            using var stream = new FileStream(filePath, FileMode.Create);
+            await image.CopyToAsync(stream);
+
+            return $"/uploads/products/{fileName}";
+        }
+
+        private void DeleteImageIfLocal(string? imageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(imageUrl))
+                return;
+
+            if (!imageUrl.StartsWith("/uploads/products/", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var webRoot = string.IsNullOrWhiteSpace(_env.WebRootPath)
+                ? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")
+                : _env.WebRootPath;
+
+            var relativePath = imageUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+            var filePath = Path.Combine(webRoot, relativePath);
+
+            if (System.IO.File.Exists(filePath))
+                System.IO.File.Delete(filePath);
         }
     }
 }

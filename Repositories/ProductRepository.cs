@@ -40,6 +40,7 @@ namespace ProductAPI.Repositories
             existingProduct.Description = product.Description;
             existingProduct.Price = product.Price;
             existingProduct.Quantity = product.Quantity;
+            existingProduct.ImageUrl = product.ImageUrl;
             existingProduct.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
